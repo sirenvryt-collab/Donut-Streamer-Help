@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "donutstreamer",
+  "version": "${version}",
+  "name": "Donut Streamer Tracker",
+  "description": "Client-side session tracker and stream HUD for manual gambling sessions. No automation, no packets, no server interaction.",
+  "authors": ["You"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.donutstreamer.DonutStreamerClient"]
+  },
+  "depends": {
+    "fabricloader": ">=0.18.1",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
