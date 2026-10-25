@@ -63,11 +63,17 @@ public final class HudEditor {
     private static List<Row> rows(Session s) {
         List<Row> rows = new ArrayList<>();
         rows.add(new Row("Show HUD", s.hudVisible, () -> s.hudVisible = !s.hudVisible));
+        rows.add(new Row("Turn ALL elements on", null, () -> {
+            for (Widgets.W w : Widgets.W.values()) s.cfg(w).on = true;
+        }));
+        rows.add(new Row("Turn ALL elements off", null, () -> {
+            for (Widgets.W w : Widgets.W.values()) s.cfg(w).on = false;
+        }));
         for (Widgets.W w : Widgets.W.values()) {
             rows.add(new Row(w.label, s.cfg(w).on, () -> s.cfg(w).on = !s.cfg(w).on));
         }
         rows.add(new Row("Tag doubled payments", s.doubleTag, () -> s.doubleTag = !s.doubleTag));
-        rows.add(new Row("Net as % of balance", s.percentMode, () -> s.percentMode = !s.percentMode));
+        rows.add(new Row("Live as % of balance", s.percentMode, () -> s.percentMode = !s.percentMode));
         rows.add(new Row("Count sells in profit", s.includeSells, () -> {
             s.includeSells = !s.includeSells;
             s.recompute();
@@ -108,17 +114,23 @@ public final class HudEditor {
             }
         }
 
-        // ---- editor button + panel ----
+        // ---- editor button + panel (rows flow into columns so everything fits on screen) ----
         String btn = "HUD editor " + (panelOpen ? "\u25B2" : "\u25BC");
         int btnW = tr.getWidth(btn) + 8, btnH = 12;
         int btnX = sw - btnW - 4, btnY = 4;
 
         List<Row> rows = rows(s);
-        int rowH = 11, panelW = 0;
-        for (Row r : rows) panelW = Math.max(panelW, tr.getWidth((r.checked() == null ? "" : "[x] ") + r.label()));
-        panelW += 8;
-        int panelH = rows.size() * rowH + 6;
-        int panelX = sw - panelW - 4, panelY = btnY + btnH + 2;
+        int rowH = 11;
+        int labelW = 0;
+        for (Row r : rows) labelW = Math.max(labelW, tr.getWidth("[x] " + r.label()));
+        int colW = labelW + 10;
+        int panelY = btnY + btnH + 2;
+        int screenH = mc.getWindow().getScaledHeight();
+        int perCol = Math.max(1, (screenH - panelY - 12) / rowH);
+        int cols = (rows.size() + perCol - 1) / perCol;
+        int panelW = cols * colW;
+        int panelH = Math.min(rows.size(), perCol) * rowH + 6;
+        int panelX = sw - panelW - 4;
 
         boolean overBtn = inside(mx, my, btnX, btnY, btnW, btnH);
         boolean overPanel = panelOpen && inside(mx, my, panelX, panelY, panelW, panelH);
@@ -129,8 +141,10 @@ public final class HudEditor {
                 panelOpen = !panelOpen;
                 consumed = true;
             } else if (overPanel) {
-                int idx = (my - panelY - 3) / rowH;
-                if (idx >= 0 && idx < rows.size()) {
+                int col = (mx - panelX) / colW;
+                int rowIdx = (my - panelY - 3) / rowH;
+                int idx = col * perCol + rowIdx;
+                if (rowIdx >= 0 && rowIdx < perCol && idx >= 0 && idx < rows.size()) {
                     rows.get(idx).action().run();
                     s.save();
                 }
@@ -162,21 +176,21 @@ public final class HudEditor {
         }
 
         // ---- draw button + panel on top ----
-        ctx.fill(btnX, btnY, btnX + btnW, btnY + btnH, overBtn ? 0xE0404040 : 0xD0000000);
-        outline(ctx, btnX, btnY, btnW, btnH, 0xFFAAAAAA);
+        ctx.fill(btnX, btnY, btnX + btnW, btnY + btnH, overBtn ? 0xE0303844 : 0xE00D1117);
+        outline(ctx, btnX, btnY, btnW, btnH, Widgets.GOLD);
         ctx.drawTextWithShadow(tr, btn, btnX + 4, btnY + 2, Widgets.GOLD);
 
         if (panelOpen) {
-            ctx.fill(panelX, panelY, panelX + panelW, panelY + panelH, 0xE0000000);
-            outline(ctx, panelX, panelY, panelW, panelH, 0xFFAAAAAA);
-            int y = panelY + 3;
-            for (Row r : rows) {
-                boolean over = inside(mx, my, panelX, y, panelW, rowH);
-                if (over) ctx.fill(panelX + 1, y, panelX + panelW - 1, y + rowH, 0x55FFFFFF);
+            ctx.fill(panelX, panelY, panelX + panelW, panelY + panelH, 0xF00D1117);
+            outline(ctx, panelX, panelY, panelW, panelH, 0xFF30363D);
+            for (int i = 0; i < rows.size(); i++) {
+                Row r = rows.get(i);
+                int rx = panelX + (i / perCol) * colW;
+                int ry = panelY + 3 + (i % perCol) * rowH;
+                if (inside(mx, my, rx, ry, colW, rowH)) ctx.fill(rx + 1, ry, rx + colW - 1, ry + rowH, 0x40FFFFFF);
                 String prefix = r.checked() == null ? "" : (r.checked() ? "[x] " : "[ ] ");
-                int color = (r.checked() != null && r.checked()) ? Widgets.GREEN : Widgets.WHITE;
-                ctx.drawTextWithShadow(tr, prefix + r.label(), panelX + 4, y + 1, color);
-                y += rowH;
+                int color = r.checked() == null ? Widgets.GOLD : (r.checked() ? Widgets.GREEN : Widgets.GRAY);
+                ctx.drawTextWithShadow(tr, prefix + r.label(), rx + 5, ry + 1, color);
             }
         }
     }
