@@ -26,6 +26,7 @@ import java.util.Map;
  * IN   = "name paid you $X"  (money received)  -> counts as a win
  * OUT  = "you paid name $X"  (money sent)      -> counts as a loss
  * SELL = "$X" from selling items (tracked separately, optionally included in profit)
+ * BUY  = "You bought N item for $X" -> subtracts from live profit, but is not a win/loss/gamble
  */
 public final class Session {
     private static final Logger LOG = LoggerFactory.getLogger("donutstreamer");
@@ -34,6 +35,7 @@ public final class Session {
     public static final String IN = "IN";
     public static final String OUT = "OUT";
     public static final String SELL = "SELL";
+    public static final String BUY = "BUY";     // "You bought 3 item for $X": subtracts from live profit, not a gamble
 
     public static final class Entry {
         public String kind = IN;
@@ -94,7 +96,7 @@ public final class Session {
     public Map<String, WidgetCfg> widgets = new LinkedHashMap<>();
 
     // ---- derived (not saved) ----
-    public transient long net, received, sent, sold, biggestIn, biggestOut;
+    public transient long net, received, sent, sold, biggestIn, biggestOut, peak, low, spent;
     public transient int wins, losses, streak, bestWinStreak, worstLossStreak;
 
     public WidgetCfg cfg(Widgets.W w) {
@@ -108,12 +110,15 @@ public final class Session {
     public long delta(Entry e) {
         if (IN.equals(e.kind)) return e.amount;
         if (OUT.equals(e.kind)) return -e.amount;
+        if (BUY.equals(e.kind)) return -e.amount;
         return includeSells ? e.amount : 0;
     }
 
     public void recompute() {
-        received = 0; sent = 0; sold = 0; biggestIn = 0; biggestOut = 0;
+        received = 0; sent = 0; sold = 0; spent = 0; biggestIn = 0; biggestOut = 0;
         wins = 0; losses = 0; streak = 0; bestWinStreak = 0; worstLossStreak = 0;
+        peak = 0; low = 0;
+        long run = 0;
         int ws = 0, ls = 0;
         for (Entry e : history) {
             if (IN.equals(e.kind)) {
@@ -132,11 +137,16 @@ public final class Session {
                 streak = -ls;
                 worstLossStreak = Math.max(worstLossStreak, ls);
                 biggestOut = Math.max(biggestOut, e.amount);
+            } else if (BUY.equals(e.kind)) {
+                spent += e.amount;
             } else {
                 sold += e.amount;
             }
+            run += delta(e);
+            peak = Math.max(peak, run);
+            low = Math.min(low, run);
         }
-        net = received - sent + (includeSells ? sold : 0);
+        net = received - sent - spent + (includeSells ? sold : 0);
     }
 
     public Entry add(String kind, String who, long amount) {
@@ -175,6 +185,7 @@ public final class Session {
         long next = amount;
         for (int i = history.size() - 1; i >= 0; i--) {
             Entry e = history.get(i);
+            if (BUY.equals(e.kind)) continue;
             if (e.who.isEmpty() || !e.who.equalsIgnoreCase(who)) continue;
             if (!IN.equals(e.kind)) break;                 // you paid them in between: chain is broken
             if (!isDouble(next, e.amount)) break;
@@ -210,7 +221,7 @@ public final class Session {
     public List<PlayerStat> playerStats() {
         Map<String, PlayerStat> map = new LinkedHashMap<>();
         for (Entry e : history) {
-            if (SELL.equals(e.kind) || e.who.isEmpty()) continue;
+            if (SELL.equals(e.kind) || BUY.equals(e.kind) || e.who.isEmpty()) continue;
             PlayerStat p = map.computeIfAbsent(e.who.toLowerCase(Locale.ROOT), k -> {
                 PlayerStat n = new PlayerStat();
                 n.name = e.who;
@@ -226,7 +237,7 @@ public final class Session {
 
     public String summary() {
         return String.format(Locale.ROOT,
-                "Donut SMP session | Net %s | %dW-%dL (%s%%) | Received %s | Sent %s | Time %s",
+                "Donut SMP session | Live %s | %dW-%dL (%s%%) | Received %s | Sent %s | Time %s",
                 Money.signed(net), wins, losses, winRate(),
                 Money.format(received), Money.format(sent), time());
     }
