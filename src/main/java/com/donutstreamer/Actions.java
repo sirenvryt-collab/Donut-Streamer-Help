@@ -2,7 +2,6 @@ package com.donutstreamer;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
-import net.minecraft.client.sound.PositionedSoundInstance;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
@@ -67,8 +66,8 @@ public final class Actions {
         s.save();
         s.logCsv(kind, e.who, e.amount, s.delta(e));
         if (s.sound && Session.IN.equals(kind)) {
-            MinecraftClient.getInstance().getSoundManager()
-                    .play(PositionedSoundInstance.master(SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f));
+            ClientPlayerEntity pl = MinecraftClient.getInstance().player;
+            if (pl != null) pl.playSound(SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f, 1.0f);
         }
         checkAlerts();
     }
