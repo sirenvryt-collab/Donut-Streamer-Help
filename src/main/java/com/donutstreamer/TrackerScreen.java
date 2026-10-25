@@ -4,10 +4,17 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
-/** Read-only tracker window (open with /ds). Shows the session and a per-player table with rakeback. */
+/** Read-only tracker window (open with /ds): live stats, charts and a per-player table with rakeback. */
 public final class TrackerScreen extends Screen {
+    private static final int PANEL = 0xF00D1117;
+    private static final int CARD = 0xFF161B22;
+    private static final int INSET = 0xFF0A0E13;
+    private static final int BORDER = 0xFF30363D;
+
     public TrackerScreen() {
         super(Text.literal("Donut Streamer Tracker"));
     }
@@ -24,57 +31,126 @@ public final class TrackerScreen extends Screen {
         ctx.fill(x + w - 1, y, x + w, y + h, color);
     }
 
+    private void card(DrawContext ctx, int x, int y, int w, String label, String value, int color) {
+        ctx.fill(x, y, x + w, y + 26, CARD);
+        ctx.fill(x, y, x + w, y + 2, color);
+        ctx.drawTextWithShadow(this.textRenderer, label, x + 5, y + 5, Widgets.GRAY);
+        ctx.drawTextWithShadow(this.textRenderer, value, x + 5, y + 15, color);
+    }
+
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
         super.render(ctx, mouseX, mouseY, delta);
         Session s = DonutStreamerClient.session;
 
-        int pw = 340;
-        int ph = Math.min(this.height - 20, 230);
+        int pw = Math.min(this.width - 20, 400);
+        int ph = Math.min(this.height - 20, 290);
         int px = (this.width - pw) / 2;
         int py = (this.height - ph) / 2;
-
-        ctx.fill(px, py, px + pw, py + ph, 0xE0101010);
-        outline(ctx, px, py, pw, ph, 0xFFAAAAAA);
-
         int x = px + 8;
-        int y = py + 8;
-        ctx.drawTextWithShadow(this.textRenderer, "Donut Streamer Tracker", x, y, Widgets.GOLD);
-        y += 14;
+        int iw = pw - 16;
 
+        ctx.fill(px, py, px + pw, py + ph, PANEL);
+        outline(ctx, px, py, pw, ph, BORDER);
+
+        // ---- title bar ----
+        ctx.fill(px + 1, py + 1, px + pw - 1, py + 19, CARD);
+        ctx.fill(px + 1, py + 19, px + pw - 1, py + 20, Widgets.GOLD);
+        ctx.drawTextWithShadow(this.textRenderer, "Donut Streamer", x, py + 6, Widgets.GOLD);
         int netColor = s.net > 0 ? Widgets.GREEN : (s.net < 0 ? Widgets.RED : Widgets.WHITE);
-        String netText = "Net: " + Money.signed(s.net);
-        if (s.startBalance > 0) {
-            netText += String.format(java.util.Locale.ROOT, "  (%+.1f%%)", 100.0 * s.net / s.startBalance);
-        }
-        ctx.drawTextWithShadow(this.textRenderer, netText, x, y, netColor);
-        y += 11;
-        ctx.drawTextWithShadow(this.textRenderer,
-                s.wins + "W - " + s.losses + "L (" + s.winRate() + "%)   Streak " + s.streakText()
-                        + "   Time " + s.time(), x, y, Widgets.WHITE);
-        y += 11;
-        ctx.drawTextWithShadow(this.textRenderer,
-                "Received " + Money.format(s.received) + "   Sent " + Money.format(s.sent)
-                        + "   Sold " + Money.format(s.sold) + (s.includeSells ? " (counted)" : " (not counted)"),
-                x, y, Widgets.GRAY);
-        y += 15;
+        String liveText = "LIVE  " + Money.signed(s.net);
+        ctx.drawTextWithShadow(this.textRenderer, liveText, px + pw - 8 - this.textRenderer.getWidth(liveText),
+                py + 6, netColor);
 
+        // ---- stat cards ----
+        int y = py + 26;
+        int gap = 4;
+        int cw = (iw - gap * 3) / 4;
+        String liveValue = Money.signed(s.net);
+        if (s.startBalance > 0) {
+            liveValue += String.format(Locale.ROOT, " (%+.1f%%)", 100.0 * s.net / s.startBalance);
+        }
+        card(ctx, x, y, cw, "LIVE", liveValue, netColor);
+        card(ctx, x + (cw + gap), y, cw, "RECORD", s.wins + "W - " + s.losses + "L", Widgets.WHITE);
+        card(ctx, x + (cw + gap) * 2, y, cw, "WIN RATE", s.winRate() + "%",
+                s.wins >= s.losses ? Widgets.GREEN : Widgets.RED);
+        card(ctx, x + (cw + gap) * 3, y, cw, "STREAK  " + s.time(), s.streakText(),
+                s.streak > 0 ? Widgets.GREEN : (s.streak < 0 ? Widgets.RED : Widgets.GRAY));
+        y += 32;
+
+        // ---- charts ----
+        int lw = iw * 62 / 100;
+        int rw = iw - lw - gap;
+        int rx = x + lw + gap;
+        ctx.drawTextWithShadow(this.textRenderer, "Profit over time", x, y, Widgets.GRAY);
+        ctx.drawTextWithShadow(this.textRenderer, "Last 30 results", rx, y, Widgets.GRAY);
+        y += 11;
+        int chartH = 52;
+        ctx.fill(x, y, x + lw, y + chartH, INSET);
+        outline(ctx, x, y, lw, chartH, BORDER);
+        Widgets.lineChart(ctx, x + 3, y + 3, lw - 6, chartH - 6, Widgets.cumulative(s));
+        ctx.fill(rx, y, rx + rw, y + chartH, INSET);
+        outline(ctx, rx, y, rw, chartH, BORDER);
+        Widgets.resultBars(ctx, rx + 3, y + 3, rw - 6, chartH - 18, s, 30);
+        Widgets.splitBar(ctx, rx + 3, y + chartH - 10, rw - 6, 6, s.wins, s.losses);
+        y += chartH + 6;
+
+        // ---- stat chips (wrap to next line when full) ----
+        List<String[]> chips = new ArrayList<>();
+        List<Integer> chipColors = new ArrayList<>();
+        addChip(chips, chipColors, "Received", Money.format(s.received), Widgets.GREEN);
+        addChip(chips, chipColors, "Sent", Money.format(s.sent), Widgets.RED);
+        addChip(chips, chipColors, "Sold", Money.format(s.sold) + (s.includeSells ? "" : " (not counted)"), Widgets.AQUA);
+        if (s.spent > 0) addChip(chips, chipColors, "Bought", Money.format(s.spent), Widgets.RED);
+        addChip(chips, chipColors, "Gambles", String.valueOf(s.total()), Widgets.WHITE);
+        addChip(chips, chipColors, "Avg win", Money.format(s.received / Math.max(1, s.wins)), Widgets.GREEN);
+        addChip(chips, chipColors, "Avg loss", Money.format(s.sent / Math.max(1, s.losses)), Widgets.RED);
+        addChip(chips, chipColors, "Peak", Money.signed(s.peak), Widgets.GREEN);
+        addChip(chips, chipColors, "Low", Money.signed(s.low), Widgets.RED);
+        addChip(chips, chipColors, "Best", "W" + s.bestWinStreak, Widgets.GREEN);
+        addChip(chips, chipColors, "Worst", "L" + s.worstLossStreak, Widgets.RED);
+        if (s.elapsedMs >= 60_000 && s.total() > 0) {
+            addChip(chips, chipColors, "Per hour",
+                    Money.signed(Math.round(s.net * 3_600_000.0 / s.elapsedMs)), netColor);
+        }
+        int cx = x;
+        for (int i = 0; i < chips.size(); i++) {
+            String label = chips.get(i)[0] + " ";
+            String value = chips.get(i)[1];
+            int tw = this.textRenderer.getWidth(label + value);
+            if (cx + tw > px + pw - 8 && cx > x) {
+                cx = x;
+                y += 11;
+            }
+            ctx.drawTextWithShadow(this.textRenderer, label, cx, y, Widgets.GRAY);
+            ctx.drawTextWithShadow(this.textRenderer, value, cx + this.textRenderer.getWidth(label), y, chipColors.get(i));
+            cx += tw + 10;
+        }
+        y += 16;
+
+        // ---- player table ----
         boolean rake = s.rakebackPct > 0;
-        int cName = x, cIn = x + 100, cOut = x + 160, cNet = x + 220, cRake = x + 280;
+        int cName = x + 4;
+        int cIn = x + iw * 28 / 100;
+        int cOut = x + iw * 46 / 100;
+        int cNet = x + iw * 64 / 100;
+        int cRake = x + iw * 82 / 100;
+        ctx.fill(x, y - 2, x + iw, y + 10, CARD);
         ctx.drawTextWithShadow(this.textRenderer, "Player", cName, y, Widgets.GOLD);
-        ctx.drawTextWithShadow(this.textRenderer, "Sent you", cIn, y, Widgets.GOLD);
-        ctx.drawTextWithShadow(this.textRenderer, "You sent", cOut, y, Widgets.GOLD);
-        ctx.drawTextWithShadow(this.textRenderer, "Net", cNet, y, Widgets.GOLD);
+        ctx.drawTextWithShadow(this.textRenderer, "Paid you", cIn, y, Widgets.GOLD);
+        ctx.drawTextWithShadow(this.textRenderer, "You paid", cOut, y, Widgets.GOLD);
+        ctx.drawTextWithShadow(this.textRenderer, "Live", cNet, y, Widgets.GOLD);
         if (rake) ctx.drawTextWithShadow(this.textRenderer, "Owed", cRake, y, Widgets.GOLD);
-        y += 12;
+        y += 13;
 
         List<Session.PlayerStat> players = s.playerStats();
-        int maxRows = Math.max(0, (py + ph - 22 - y) / 10);
+        int maxRows = Math.max(0, (py + ph - 18 - y) / 10);
         if (players.isEmpty()) {
             ctx.drawTextWithShadow(this.textRenderer, "No player payments yet.", cName, y, Widgets.GRAY);
         }
         for (int i = 0; i < players.size() && i < maxRows; i++) {
             Session.PlayerStat p = players.get(i);
+            if (i % 2 == 0) ctx.fill(x, y - 1, x + iw, y + 9, 0x18FFFFFF);
             String name = s.showNames ? p.name : "Player " + (i + 1);
             ctx.drawTextWithShadow(this.textRenderer, name, cName, y, Widgets.WHITE);
             ctx.drawTextWithShadow(this.textRenderer, Money.format(p.in), cIn, y, Widgets.GREEN);
@@ -86,6 +162,11 @@ public final class TrackerScreen extends Screen {
         }
 
         ctx.drawTextWithShadow(this.textRenderer, "Esc to close  |  /ds help for commands",
-                x, py + ph - 14, Widgets.GRAY);
+                x, py + ph - 12, Widgets.GRAY);
+    }
+
+    private static void addChip(List<String[]> chips, List<Integer> colors, String label, String value, int color) {
+        chips.add(new String[]{label, value});
+        colors.add(color);
     }
 }
