@@ -16,6 +16,9 @@ import java.util.regex.Pattern;
  *   "name paid you $ amount"  -> money received
  *   "You paid name $ amount"  -> money sent
  *   "$ amount" alone          -> money from selling
+ *   "You bought N item for $ amount" -> subtracts from live profit (not a win/loss/gamble)
+ *
+ * Incoming/outgoing payments under 10M are ignored completely (not a win, loss or gamble).
  *
  * Payment lines must START with the pattern, so a player typing a fake "x paid you $ 1m"
  * inside a chat line (which starts with their name or rank) is not counted.
@@ -27,6 +30,7 @@ public final class PaymentChat {
     private static final String AMT = "\\$\\s*([0-9][0-9,]*(?:\\.[0-9]+)?[kKmMbBtT]?)";
     private static final Pattern RECEIVED = Pattern.compile("^\\s*([A-Za-z0-9_.]{1,16}) paid you " + AMT);
     private static final Pattern SENT = Pattern.compile("^\\s*You paid ([A-Za-z0-9_.]{1,16}) " + AMT);
+    private static final Pattern BOUGHT = Pattern.compile("(?i)^\\s*You bought\\s+([0-9][0-9,]*)\\s+(.+?)\\s+for\\s+" + AMT);
     private static final Pattern SELL_ONLY = Pattern.compile("^\\s*\\+?\\s*" + AMT + "\\s*$");
     private static final Pattern SELL_TEXT = Pattern.compile("(?i)^\\s*(?:you\\s+)?sold\\b.*?" + AMT);
 
@@ -68,6 +72,16 @@ public final class PaymentChat {
         if (m.find()) {
             long amount = parse(m.group(2));
             if (amount >= MIN_PAYMENT) Actions.record(Session.OUT, m.group(1), amount);
+            return message;
+        }
+
+        m = BOUGHT.matcher(plain);
+        if (m.find()) {
+            long amount = parse(m.group(3));
+            if (amount > 0) {
+                String item = m.group(1).replace(",", "") + "x " + m.group(2).trim().replace('_', ' ');
+                Actions.record(Session.BUY, item, amount);
+            }
             return message;
         }
 
