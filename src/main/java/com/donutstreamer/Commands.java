@@ -50,6 +50,7 @@ public final class Commands {
         // manual entry, for anything the chat reader missed
         root.then(entry("in", Session.IN));
         root.then(entry("out", Session.OUT));
+        root.then(entry("buy", Session.BUY));
         root.then(literal("sell").then(argument("amount", StringArgumentType.word()).executes(c -> {
             Long v = amount(c, "amount");
             if (v != null && v > 0) Actions.record(Session.SELL, "", v);
@@ -112,6 +113,9 @@ public final class Commands {
             Actions.setHudScale(FloatArgumentType.getFloat(c, "n"));
             return 1;
         })));
+        hud.then(literal("all")
+            .then(literal("on").executes(c -> { Actions.setAllWidgets(true); return 1; }))
+            .then(literal("off").executes(c -> { Actions.setAllWidgets(false); return 1; })));
         for (Widgets.W w : Widgets.W.values()) {
             hud.then(literal(w.id).executes(c -> { Actions.toggleWidget(w); return 1; }));
         }
