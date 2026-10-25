@@ -38,7 +38,7 @@ public final class Actions {
             if (!limitAlerted) {
                 limitAlerted = true;
                 chat(Formatting.RED, "[Tracker] Loss limit reached (" + Money.format(s.lossLimit)
-                        + "). Net: " + Money.signed(s.net) + ". Time to take a break.");
+                        + "). Live: " + Money.signed(s.net) + ". Time to take a break.");
             }
         } else {
             limitAlerted = false;
@@ -48,7 +48,7 @@ public final class Actions {
             if (!goalAlerted) {
                 goalAlerted = true;
                 chat(Formatting.GREEN, "[Tracker] Profit goal reached (" + Money.format(s.goal)
-                        + "). Net: " + Money.signed(s.net) + ".");
+                        + "). Live: " + Money.signed(s.net) + ".");
             }
         } else {
             goalAlerted = false;
@@ -81,7 +81,7 @@ public final class Actions {
         }
         s.save();
         s.logCsv("UNDO_" + e.kind, e.who, e.amount, -s.delta(e));
-        bar(Formatting.YELLOW, "Removed last entry  |  Net " + Money.signed(s.net));
+        bar(Formatting.YELLOW, "Removed last entry  |  Live " + Money.signed(s.net));
         checkAlerts();
     }
 
@@ -115,6 +115,12 @@ public final class Actions {
         bar(Formatting.GRAY, w.label + " " + (c.on ? "on" : "off"));
     }
 
+    public static void setAllWidgets(boolean on) {
+        for (Widgets.W w : Widgets.W.values()) s().cfg(w).on = on;
+        s().save();
+        bar(Formatting.GRAY, "All HUD elements " + (on ? "on" : "off"));
+    }
+
     public static void resetLayout() {
         s().widgets.clear();
         s().scale = 1.0f;
@@ -144,8 +150,8 @@ public final class Actions {
         s().percentMode = !s().percentMode;
         s().save();
         bar(Formatting.GRAY, s().percentMode
-                ? (s().startBalance > 0 ? "Net shown as % of starting balance" : "Percent mode on (set /ds balance first)")
-                : "Net shown as an amount");
+                ? (s().startBalance > 0 ? "Live shown as % of starting balance" : "Percent mode on (set /ds balance first)")
+                : "Live shown as an amount");
     }
 
     public static void toggleSells() {
@@ -234,8 +240,8 @@ public final class Actions {
     public static void help() {
         chat(Formatting.GOLD, "Donut Streamer Tracker (all local). Profit is read from payment messages in chat.");
         chat(Formatting.WHITE, "/ds  opens the tracker window. In chat, use the \"HUD editor\" button; drag elements to move.");
-        chat(Formatting.WHITE, "/ds in|out <amt> [name]  /ds sell <amt>  (manual entry)   /ds undo  /ds reset  /ds summary  /ds players");
+        chat(Formatting.WHITE, "/ds in|out <amt> [name]  /ds buy <amt> [item]  /ds sell <amt>  (manual entry)   /ds undo  /ds reset  /ds summary  /ds players");
         chat(Formatting.WHITE, "/ds limit|goal <amt|off>  /ds tilt <2-20|off>  /ds rakeback <0.5-50|off>  /ds balance <amt|off>");
-        chat(Formatting.WHITE, "/ds percent  /ds sells  /ds sellsource  /ds doubles  /ds sound  /ds names  /ds hud toggle|reset|scale <n>|<element>");
+        chat(Formatting.WHITE, "/ds percent  /ds sells  /ds sellsource  /ds doubles  /ds sound  /ds names  /ds hud toggle|reset|all on|all off|scale <n>|<element>");
     }
 }
